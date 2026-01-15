@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 // SnykToken represents the OAuth token structure from snyk config
@@ -52,9 +54,17 @@ func buildAuthHeaderFromEnvToken(envValue string) (string, error) {
 }
 
 // getAuthSourcePriority determines which authentication source to use based on priority
-func getAuthSourcePriority(hasManualAuth bool, snykToken, oauthToken string) (source string, useAuto bool) {
+// Priority order: manual > client_credentials > env (SNYK_TOKEN) > oauth
+func getAuthSourcePriority(hasManualAuth bool, clientID, clientSecret, snykToken, oauthToken string) (source string, useAuto bool) {
 	if hasManualAuth {
 		return "manual", false
+	}
+
+	// Check for client credentials (second highest precedence)
+	clientID = strings.TrimSpace(clientID)
+	clientSecret = strings.TrimSpace(clientSecret)
+	if clientID != "" && clientSecret != "" {
+		return "client_credentials", true
 	}
 
 	snykToken = strings.TrimSpace(snykToken)
@@ -70,7 +80,8 @@ func getAuthSourcePriority(hasManualAuth bool, snykToken, oauthToken string) (so
 }
 
 // determineAuthMethod determines which authentication method to use with full precedence logic
-func determineAuthMethod(manualHeaders []string, snykTokenEnv, oauthToken string) (shouldUse bool, authHeader, source string) {
+// Priority order: manual > client_credentials > env (SNYK_TOKEN) > oauth
+func determineAuthMethod(manualHeaders []string, clientID, clientSecret, snykTokenEnv, oauthToken string) (shouldUse bool, authHeader, source string) {
 	// Check for manual Authorization header (highest precedence)
 	hasManualAuth := false
 	var manualAuthHeader string
@@ -88,11 +99,36 @@ func determineAuthMethod(manualHeaders []string, snykTokenEnv, oauthToken string
 	}
 
 	// Determine auth source priority
-	authSource, _ := getAuthSourcePriority(hasManualAuth, snykTokenEnv, oauthToken)
+	authSource, _ := getAuthSourcePriority(hasManualAuth, clientID, clientSecret, snykTokenEnv, oauthToken)
 
 	switch authSource {
 	case "manual":
 		return false, manualAuthHeader, "manual"
+	case "client_credentials":
+		// Client credentials flow - get token using OAuth2
+		endpoint := viper.GetString("endpoint")
+		tokenURL := buildTokenURLFromEndpoint(endpoint)
+		config := ClientCredentialsConfig{
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+			TokenURL:     tokenURL,
+		}
+		accessToken, err := getClientCredentialsToken(config)
+		if err != nil {
+			// Fall back to SNYK_TOKEN if client credentials fail
+			if snykTokenEnv := strings.TrimSpace(snykTokenEnv); snykTokenEnv != "" {
+				envHeader, envErr := buildAuthHeaderFromEnvToken(snykTokenEnv)
+				if envErr == nil {
+					return true, envHeader, "env"
+				}
+			}
+			// Fall back to OAuth if env token also fails
+			if oauthToken != "" {
+				return true, fmt.Sprintf("Bearer %s", oauthToken), "oauth"
+			}
+			return false, "", "none"
+		}
+		return true, fmt.Sprintf("Bearer %s", accessToken), "client_credentials"
 	case "env":
 		envHeader, err := buildAuthHeaderFromEnvToken(snykTokenEnv)
 		if err != nil {
@@ -142,8 +178,12 @@ func getValidAccessToken() (string, error) {
 	return token.AccessToken, nil
 }
 
-// buildAuthHeader creates an Authorization header, checking precedence: manual > SNYK_TOKEN > OAuth
+// buildAuthHeader creates an Authorization header, checking precedence: manual > client_credentials > SNYK_TOKEN > OAuth
 func buildAuthHeader(manualHeaders []string) (string, error) {
+	// Get client credentials from viper (set via --client-id and --client-secret flags)
+	clientID := viper.GetString("client-id")
+	clientSecret := viper.GetString("client-secret")
+
 	// Get SNYK_TOKEN from environment
 	snykToken := os.Getenv("SNYK_TOKEN")
 
@@ -154,7 +194,7 @@ func buildAuthHeader(manualHeaders []string) (string, error) {
 		oauthTokenStr = oauthToken
 	}
 
-	shouldUse, authHeader, source := determineAuthMethod(manualHeaders, snykToken, oauthTokenStr)
+	shouldUse, authHeader, source := determineAuthMethod(manualHeaders, clientID, clientSecret, snykToken, oauthTokenStr)
 
 	if shouldUse {
 		if verbose {

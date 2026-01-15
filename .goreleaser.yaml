@@ -1,0 +1,173 @@
+# GoReleaser configuration for snyk-api-cli
+# Documentation: https://goreleaser.com
+
+version: 2
+
+# Project metadata
+project_name: snyk-api-cli
+
+# Before hooks - run checks before building
+before:
+  hooks:
+    # Ensure dependencies are up to date
+    - go mod tidy
+    # Run tests (commented out - uncomment when tests are passing)
+    # Note: You can also use SKIP_TESTS=true goreleaser release ... to skip tests
+    # - go test ./...
+
+# Build configuration
+builds:
+  - id: snyk-api-cli
+    # Path to main.go
+    main: ./main.go
+    
+    # Binary name
+    binary: snyk-api-cli
+    
+    # Build for multiple platforms
+    goos:
+      - linux
+      - darwin
+      - windows
+    
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    
+    # Ignore certain combinations
+    ignore:
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+    
+    # Environment variables for build
+    env:
+      - CGO_ENABLED=0
+    
+    # Build flags
+    flags:
+      - -trimpath
+    
+    # Linker flags - inject version information
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+
+# Archive configuration
+archives:
+  - id: snyk-api-cli-archive
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    
+    # Files to include in archive
+    files:
+      - README.md
+      - LICENSE*
+      - CHANGELOG.md
+
+# Checksum generation
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+# Snapshot configuration for local builds
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# Changelog generation
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - '^build:'
+      - 'README'
+      - 'typo'
+  groups:
+    - title: 'New Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: 'Dependency Updates'
+      regexp: '^.*?(feat|fix)\(deps\)!?:.+$'
+      order: 3
+    - title: 'Other Changes'
+      order: 999
+
+# GitHub release configuration
+release:
+  github:
+    owner: z4ce
+    name: snyk-api-cli
+  
+  # Draft release (set to false for automatic publishing)
+  draft: false
+  
+  # Prerelease detection
+  prerelease: auto
+  
+  # Release name template
+  name_template: "v{{.Version}}"
+  
+  # Footer for release notes
+  footer: |
+    ## Installation
+    
+    ### Binary Installation
+    Download the appropriate archive for your platform from the assets below and extract it.
+    
+    ### Using Go
+    ```bash
+    go install github.com/z4ce/snyk-api-cli@{{.Tag}}
+    ```
+    
+    ### Verify Checksums
+    ```bash
+    sha256sum -c checksums.txt
+    ```
+
+# Homebrew tap (optional - requires separate tap repository)
+# Uncomment and configure if you want to publish to Homebrew
+# brews:
+#   - name: snyk-api-cli
+#     repository:
+#       owner: z4ce
+#       name: homebrew-tap
+#     homepage: "https://github.com/z4ce/snyk-api-cli"
+#     description: "A comprehensive CLI tool for the Snyk API"
+#     license: "MIT"
+#     install: |
+#       bin.install "snyk-api-cli"
+
+# Source archive
+source:
+  enabled: true
+  name_template: '{{ .ProjectName }}-{{ .Version }}-source'
+  format: 'tar.gz'
+
+# Announce (optional - configure if you want to announce releases)
+# announce:
+#   slack:
+#     enabled: false
+#     message_template: 'snyk-api-cli {{ .Tag }} is out! Check it out at {{ .ReleaseURL }}'
+

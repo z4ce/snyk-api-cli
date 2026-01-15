@@ -686,7 +686,7 @@ func createTestCurlCommand(mockSnykAvailable bool, mockTokenOutput string) *cobr
 }
 
 // runCurlWithMockedAuth is a version of runCurl with mocked authentication functionality for testing
-func runCurlWithMockedAuth(cmd *cobra.Command, args []string, mockSnykAvailable bool, mockTokenOutput string) error {
+func runCurlWithMockedAuth(_ *cobra.Command, args []string, mockSnykAvailable bool, mockTokenOutput string) error {
 	path := args[0]
 	endpoint := viper.GetString("endpoint")
 	version := viper.GetString("version")
@@ -767,7 +767,8 @@ func getMockedAuthHeader(manualHeaders []string, snykAvailable bool, tokenOutput
 		}
 	}
 
-	shouldUse, authHeader, source := determineAuthMethod(manualHeaders, snykToken, oauthTokenStr)
+	// No client credentials in test mock
+	shouldUse, authHeader, source := determineAuthMethod(manualHeaders, "", "", snykToken, oauthTokenStr)
 
 	if shouldUse {
 		if verbose {
@@ -784,34 +785,7 @@ func getMockedAuthHeader(manualHeaders []string, snykAvailable bool, tokenOutput
 	return "", nil
 }
 
-// getMockedAutoAuthHeader mocks the OAuth functionality for testing (legacy function)
-func getMockedAutoAuthHeader(snykAvailable bool, tokenOutput string) (string, error) {
-	if !snykAvailable {
-		return "", fmt.Errorf("snyk CLI not found: executable file not found")
-	}
 
-	if tokenOutput == "" {
-		return "", fmt.Errorf("no token found in snyk config")
-	}
-
-	token, err := parseSnykToken(tokenOutput)
-	if err != nil {
-		return "", err
-	}
-
-	// Check if token is expired
-	if isTokenExpired(token) {
-		if token.RefreshToken == "" {
-			return "", fmt.Errorf("token expired and no refresh token available")
-		}
-
-		// Mock refresh failure
-		return "", fmt.Errorf("failed to refresh token: token refresh not implemented - this would require OAuth endpoint integration")
-	}
-
-	// Build and return the authorization header
-	return buildAuthHeaderFromToken(token)
-}
 
 func TestCurlCommandSnykTokenIntegration(t *testing.T) {
 	// Test SNYK_TOKEN environment variable integration

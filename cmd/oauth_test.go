@@ -354,19 +354,23 @@ func mockExecuteCommand(command []string, mockOutput string, mockError error) (s
 }
 
 func TestAuthenticationPrecedence(t *testing.T) {
-	// Test the full authentication precedence: Authorization header > SNYK_TOKEN > OAuth
+	// Test the full authentication precedence: Authorization header > client_credentials > SNYK_TOKEN > OAuth
 	tests := []struct {
 		name           string
 		manualHeaders  []string
+		clientID       string
+		clientSecret   string
 		snykTokenEnv   string
 		oauthToken     string
-		expectedSource string // "manual", "env", "oauth", "none"
+		expectedSource string // "manual", "client_credentials", "env", "oauth", "none"
 		expectedToken  string
 		shouldUseAuth  bool
 	}{
 		{
 			name:           "Manual auth header takes highest precedence",
 			manualHeaders:  []string{"Authorization: Bearer manual_token"},
+			clientID:       "",
+			clientSecret:   "",
 			snykTokenEnv:   "env_token",
 			oauthToken:     "oauth_token",
 			expectedSource: "manual",
@@ -374,8 +378,10 @@ func TestAuthenticationPrecedence(t *testing.T) {
 			shouldUseAuth:  false, // Manual header, so don't use auto auth
 		},
 		{
-			name:           "SNYK_TOKEN used when no manual header",
+			name:           "SNYK_TOKEN used when no manual header or client credentials",
 			manualHeaders:  []string{"Content-Type: application/json"},
+			clientID:       "",
+			clientSecret:   "",
 			snykTokenEnv:   "env_token",
 			oauthToken:     "oauth_token",
 			expectedSource: "env",
@@ -383,8 +389,10 @@ func TestAuthenticationPrecedence(t *testing.T) {
 			shouldUseAuth:  true,
 		},
 		{
-			name:           "OAuth used when no manual header or SNYK_TOKEN",
+			name:           "OAuth used when no manual header, client credentials, or SNYK_TOKEN",
 			manualHeaders:  []string{"Content-Type: application/json"},
+			clientID:       "",
+			clientSecret:   "",
 			snykTokenEnv:   "",
 			oauthToken:     "oauth_token",
 			expectedSource: "oauth",
@@ -394,6 +402,8 @@ func TestAuthenticationPrecedence(t *testing.T) {
 		{
 			name:           "No auth when none available",
 			manualHeaders:  []string{"Content-Type: application/json"},
+			clientID:       "",
+			clientSecret:   "",
 			snykTokenEnv:   "",
 			oauthToken:     "",
 			expectedSource: "none",
@@ -403,6 +413,8 @@ func TestAuthenticationPrecedence(t *testing.T) {
 		{
 			name:           "SNYK_TOKEN overrides OAuth even when OAuth available",
 			manualHeaders:  []string{},
+			clientID:       "",
+			clientSecret:   "",
 			snykTokenEnv:   "env_token",
 			oauthToken:     "oauth_token",
 			expectedSource: "env",
@@ -412,6 +424,8 @@ func TestAuthenticationPrecedence(t *testing.T) {
 		{
 			name:           "Empty SNYK_TOKEN falls back to OAuth",
 			manualHeaders:  []string{},
+			clientID:       "",
+			clientSecret:   "",
 			snykTokenEnv:   "   ", // Whitespace should be treated as empty
 			oauthToken:     "oauth_token",
 			expectedSource: "oauth",
@@ -421,6 +435,8 @@ func TestAuthenticationPrecedence(t *testing.T) {
 		{
 			name:           "Case insensitive manual auth header still wins",
 			manualHeaders:  []string{"authorization: Bearer manual_token"},
+			clientID:       "",
+			clientSecret:   "",
 			snykTokenEnv:   "env_token",
 			oauthToken:     "oauth_token",
 			expectedSource: "manual",
@@ -431,7 +447,7 @@ func TestAuthenticationPrecedence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			shouldUse, authHeader, source := determineAuthMethod(tt.manualHeaders, tt.snykTokenEnv, tt.oauthToken)
+			shouldUse, authHeader, source := determineAuthMethod(tt.manualHeaders, tt.clientID, tt.clientSecret, tt.snykTokenEnv, tt.oauthToken)
 
 			if shouldUse != tt.shouldUseAuth {
 				t.Errorf("determineAuthMethod() shouldUse = %v, want %v", shouldUse, tt.shouldUseAuth)
@@ -507,9 +523,12 @@ func TestSnykTokenValidation(t *testing.T) {
 
 func TestGetAuthSourcePriority(t *testing.T) {
 	// Test the priority logic in isolation
+	// Priority order: manual > client_credentials > env (SNYK_TOKEN) > oauth
 	tests := []struct {
 		name            string
 		hasManualAuth   bool
+		clientID        string
+		clientSecret    string
 		snykToken       string
 		oauthToken      string
 		expectedSource  string
@@ -518,22 +537,38 @@ func TestGetAuthSourcePriority(t *testing.T) {
 		{
 			name:            "Manual auth blocks all automatic auth",
 			hasManualAuth:   true,
+			clientID:        "client_id",
+			clientSecret:    "client_secret",
 			snykToken:       "env_token",
 			oauthToken:      "oauth_token",
 			expectedSource:  "manual",
 			expectedUseAuto: false,
 		},
 		{
-			name:            "SNYK_TOKEN used when no manual auth",
+			name:            "Client credentials used when no manual auth",
 			hasManualAuth:   false,
+			clientID:        "client_id",
+			clientSecret:    "client_secret",
+			snykToken:       "env_token",
+			oauthToken:      "oauth_token",
+			expectedSource:  "client_credentials",
+			expectedUseAuto: true,
+		},
+		{
+			name:            "SNYK_TOKEN used when no manual auth or client credentials",
+			hasManualAuth:   false,
+			clientID:        "",
+			clientSecret:    "",
 			snykToken:       "env_token",
 			oauthToken:      "oauth_token",
 			expectedSource:  "env",
 			expectedUseAuto: true,
 		},
 		{
-			name:            "OAuth used when no manual auth or SNYK_TOKEN",
+			name:            "OAuth used when no manual auth, client credentials, or SNYK_TOKEN",
 			hasManualAuth:   false,
+			clientID:        "",
+			clientSecret:    "",
 			snykToken:       "",
 			oauthToken:      "oauth_token",
 			expectedSource:  "oauth",
@@ -542,16 +577,38 @@ func TestGetAuthSourcePriority(t *testing.T) {
 		{
 			name:            "No auth when nothing available",
 			hasManualAuth:   false,
+			clientID:        "",
+			clientSecret:    "",
 			snykToken:       "",
 			oauthToken:      "",
 			expectedSource:  "none",
 			expectedUseAuto: false,
 		},
+		{
+			name:            "Incomplete client credentials (missing secret) falls through",
+			hasManualAuth:   false,
+			clientID:        "client_id",
+			clientSecret:    "",
+			snykToken:       "env_token",
+			oauthToken:      "",
+			expectedSource:  "env",
+			expectedUseAuto: true,
+		},
+		{
+			name:            "Incomplete client credentials (missing id) falls through",
+			hasManualAuth:   false,
+			clientID:        "",
+			clientSecret:    "client_secret",
+			snykToken:       "env_token",
+			oauthToken:      "",
+			expectedSource:  "env",
+			expectedUseAuto: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			source, useAuto := getAuthSourcePriority(tt.hasManualAuth, tt.snykToken, tt.oauthToken)
+			source, useAuto := getAuthSourcePriority(tt.hasManualAuth, tt.clientID, tt.clientSecret, tt.snykToken, tt.oauthToken)
 
 			if source != tt.expectedSource {
 				t.Errorf("getAuthSourcePriority() source = %v, want %v", source, tt.expectedSource)

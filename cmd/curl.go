@@ -155,7 +155,7 @@ func createRequest(method, url, data string) (*http.Request, error) {
 
 	// Set default content type for POST/PUT with data
 	if data != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/vnd.api+json")
 	}
 
 	return req, nil

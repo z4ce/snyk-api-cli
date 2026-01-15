@@ -69,3 +69,11 @@ debug.test
 
 # Local configuration files
 *.local 
+
+# GoReleaser output
+dist/
+*.tar.gz
+*.zip
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.cursor/rules/snyk_rules.mdc

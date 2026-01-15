@@ -9,7 +9,14 @@ import (
 	"github.com/z4ce/snyk-api-cli/cmd"
 )
 
-var cfgFile string
+var (
+	cfgFile string
+	// Version information (set by GoReleaser)
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
+)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -18,6 +25,20 @@ var rootCmd = &cobra.Command{
 	Long: `snyk-api-cli is a command-line tool designed to help you explore and interact 
 with the Snyk API. It provides curl-like functionality with automatic handling 
 of Snyk-specific parameters and endpoints.`,
+	Version: version,
+}
+
+// versionCmd represents the version command
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print version information",
+	Long:  `Print detailed version information including commit hash and build date.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("snyk-api-cli version %s\n", version)
+		fmt.Printf("  commit: %s\n", commit)
+		fmt.Printf("  built at: %s\n", date)
+		fmt.Printf("  built by: %s\n", builtBy)
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -32,6 +53,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Register subcommands
+	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(cmd.CurlCmd)
 
 	// Apps
