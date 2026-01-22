@@ -45,12 +45,13 @@ func isTokenExpired(token SnykToken) bool {
 }
 
 // buildAuthHeaderFromEnvToken creates an Authorization header from SNYK_TOKEN environment variable
+// Note: Snyk API tokens use "token" prefix, not "Bearer" (which is for OAuth tokens)
 func buildAuthHeaderFromEnvToken(envValue string) (string, error) {
 	token := strings.TrimSpace(envValue)
 	if token == "" {
 		return "", fmt.Errorf("SNYK_TOKEN is empty")
 	}
-	return fmt.Sprintf("Bearer %s", token), nil
+	return fmt.Sprintf("token %s", token), nil
 }
 
 // getAuthSourcePriority determines which authentication source to use based on priority

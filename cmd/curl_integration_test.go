@@ -801,7 +801,7 @@ func TestCurlCommandSnykTokenIntegration(t *testing.T) {
 			name:          "SNYK_TOKEN used when set",
 			snykToken:     "env_test_token",
 			manualHeaders: []string{},
-			expectToken:   "Bearer env_test_token",
+			expectToken:   "token env_test_token",
 			expectError:   false,
 		},
 		{
@@ -816,7 +816,7 @@ func TestCurlCommandSnykTokenIntegration(t *testing.T) {
 			snykToken:      "env_test_token",
 			manualHeaders:  []string{},
 			mockSnykOutput: `{"access_token":"oauth_token","refresh_token":"refresh123","expiry":"2030-12-31T23:59:59Z"}`,
-			expectToken:    "Bearer env_test_token",
+			expectToken:    "token env_test_token",
 			expectError:    false,
 		},
 		{
@@ -946,7 +946,7 @@ func TestCurlCommandAuthPrecedenceIntegration(t *testing.T) {
 			snykTokenEnv:   "env_token",
 			manualHeaders:  []string{"Content-Type: application/json"},
 			mockSnykOutput: `{"access_token":"oauth_token","refresh_token":"refresh123","expiry":"2030-12-31T23:59:59Z"}`,
-			expectedAuth:   "Bearer env_token",
+			expectedAuth:   "token env_token",
 			expectedSource: "env",
 		},
 		{
