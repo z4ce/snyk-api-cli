@@ -37,6 +37,8 @@ func createMockServer() *httptest.Server {
 
 		// Set response based on path
 		if strings.Contains(r.URL.Path, "/error") {
+			// Include Snyk-Request-Id header for error responses
+			w.Header().Set(SnykRequestIDHeader, "mock-request-id-error")
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(w, `{"error":"Bad Request","status":400}`)
 			return
@@ -44,6 +46,8 @@ func createMockServer() *httptest.Server {
 
 		if strings.Contains(r.URL.Path, "/auth") {
 			if r.Header.Get("Authorization") == "" {
+				// Include Snyk-Request-Id header for auth errors
+				w.Header().Set(SnykRequestIDHeader, "mock-request-id-auth")
 				w.WriteHeader(http.StatusUnauthorized)
 				fmt.Fprintf(w, `{"error":"Unauthorized","status":401}`)
 				return

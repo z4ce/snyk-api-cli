@@ -180,34 +180,5 @@ func addHeaders(req *http.Request, headers []string, userAgent string) error {
 }
 
 func handleResponse(resp *http.Response, includeResp, verbose, silent bool) error {
-	if verbose {
-		fmt.Fprintf(os.Stderr, "* Response: %s\n", resp.Status)
-	}
-
-	// Print response headers if requested
-	if includeResp {
-		fmt.Printf("%s %s\n", resp.Proto, resp.Status)
-		for key, values := range resp.Header {
-			for _, value := range values {
-				fmt.Printf("%s: %s\n", key, value)
-			}
-		}
-		fmt.Println()
-	}
-
-	// Read and print response body
-	if !silent {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read response body: %w", err)
-		}
-		fmt.Print(string(body))
-	}
-
-	// Return error for non-2xx status codes if verbose
-	if verbose && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	return nil
+	return HandleHTTPResponse(resp, includeResp, verbose, silent)
 }

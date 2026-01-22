@@ -3,12 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -31,25 +26,25 @@ Examples:
 }
 
 var (
-	createCollectionName         string
-	createCollectionType         string
-	createCollectionVerbose      bool
-	createCollectionSilent       bool
-	createCollectionIncludeResp  bool
-	createCollectionUserAgent    string
+	createCollectionName        string
+	createCollectionType        string
+	createCollectionVerbose     bool
+	createCollectionSilent      bool
+	createCollectionIncludeResp bool
+	createCollectionUserAgent   string
 )
 
 func init() {
 	// Add flags for request body attributes
 	CreateCollectionCmd.Flags().StringVar(&createCollectionName, "name", "", "Name of the collection (required)")
 	CreateCollectionCmd.Flags().StringVar(&createCollectionType, "type", "collection", "Type of the collection")
-	
+
 	// Add standard flags like curl command
 	CreateCollectionCmd.Flags().BoolVarP(&createCollectionVerbose, "verbose", "v", false, "Make the operation more talkative")
 	CreateCollectionCmd.Flags().BoolVarP(&createCollectionSilent, "silent", "s", false, "Silent mode")
 	CreateCollectionCmd.Flags().BoolVarP(&createCollectionIncludeResp, "include", "i", false, "Include HTTP response headers in output")
 	CreateCollectionCmd.Flags().StringVarP(&createCollectionUserAgent, "user-agent", "A", "snyk-api-cli/1.0", "User agent string to send")
-	
+
 	// Mark required flags
 	CreateCollectionCmd.MarkFlagRequired("name")
 }
@@ -65,69 +60,22 @@ func runCreateCollection(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to build URL: %w", err)
 	}
 
-	if createCollectionVerbose {
-		fmt.Fprintf(os.Stderr, "* Requesting POST %s\n", fullURL)
-	}
-
 	// Build request body
 	requestBody, err := buildCreateCollectionRequestBody()
 	if err != nil {
 		return fmt.Errorf("failed to build request body: %w", err)
 	}
 
-	if createCollectionVerbose {
-		fmt.Fprintf(os.Stderr, "* Request body: %s\n", requestBody)
-	}
-
-	// Create the HTTP request
-	req, err := http.NewRequest("POST", fullURL, strings.NewReader(requestBody))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set content type for JSON:API
-	req.Header.Set("Content-Type", "application/vnd.api+json")
-
-	// Handle authentication with same precedence as curl: Authorization header > SNYK_TOKEN > OAuth
-	if createCollectionVerbose {
-		fmt.Fprintf(os.Stderr, "* Checking authentication options\n")
-	}
-
-	authHeader, err := buildAuthHeader([]string{}) // No manual headers for this command
-	if err != nil {
-		if createCollectionVerbose {
-			fmt.Fprintf(os.Stderr, "* Warning: failed to get automatic auth: %v\n", err)
-		}
-		// Don't fail the request, just proceed without automatic auth
-	} else if authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
-		if createCollectionVerbose {
-			fmt.Fprintf(os.Stderr, "* Added automatic authorization header\n")
-		}
-	} else if createCollectionVerbose {
-		fmt.Fprintf(os.Stderr, "* No automatic authorization available\n")
-	}
-
-	// Set user agent
-	req.Header.Set("User-Agent", createCollectionUserAgent)
-
-	// Make the request
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	if createCollectionVerbose {
-		fmt.Fprintf(os.Stderr, "* Making request...\n")
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Handle response using the same pattern as curl
-	return handleCreateCollectionResponse(resp, createCollectionIncludeResp, createCollectionVerbose, createCollectionSilent)
+	return ExecuteAPIRequest(RequestOptions{
+		Method:      "POST",
+		URL:         fullURL,
+		Body:        requestBody,
+		ContentType: "application/vnd.api+json",
+		Verbose:     createCollectionVerbose,
+		Silent:      createCollectionSilent,
+		IncludeResp: createCollectionIncludeResp,
+		UserAgent:   createCollectionUserAgent,
+	})
 }
 
 func buildCreateCollectionURL(endpoint, orgID, version string) (string, error) {
@@ -156,7 +104,7 @@ func buildCreateCollectionRequestBody() (string, error) {
 
 	// Build attributes object
 	attributes := make(map[string]interface{})
-	
+
 	if createCollectionName != "" {
 		attributes["name"] = createCollectionName
 	}
@@ -177,37 +125,4 @@ func buildCreateCollectionRequestBody() (string, error) {
 	}
 
 	return string(jsonData), nil
-}
-
-func handleCreateCollectionResponse(resp *http.Response, includeResp, verbose, silent bool) error {
-	if verbose {
-		fmt.Fprintf(os.Stderr, "* Response: %s\n", resp.Status)
-	}
-
-	// Print response headers if requested
-	if includeResp {
-		fmt.Printf("%s %s\n", resp.Proto, resp.Status)
-		for key, values := range resp.Header {
-			for _, value := range values {
-				fmt.Printf("%s: %s\n", key, value)
-			}
-		}
-		fmt.Println()
-	}
-
-	// Read and print response body
-	if !silent {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read response body: %w", err)
-		}
-		fmt.Print(string(body))
-	}
-
-	// Return error for non-2xx status codes if verbose
-	if verbose && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	return nil
 }

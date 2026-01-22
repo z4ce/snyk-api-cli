@@ -2,12 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -65,66 +60,16 @@ func runCreateBrokerOrgsForBulkMigration(cmd *cobra.Command, args []string) erro
 		return fmt.Errorf("failed to build URL: %w", err)
 	}
 
-	if createBrokerOrgsForBulkMigrationVerbose {
-		fmt.Fprintf(os.Stderr, "* Requesting POST %s\n", fullURL)
-	}
-
-	// Create the HTTP request
-	var body io.Reader
-	if createBrokerOrgsForBulkMigrationData != "" {
-		body = strings.NewReader(createBrokerOrgsForBulkMigrationData)
-	}
-
-	req, err := http.NewRequest("POST", fullURL, body)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set content type for JSON data
-	if createBrokerOrgsForBulkMigrationData != "" {
-		req.Header.Set("Content-Type", "application/vnd.api+json")
-	}
-
-	// Handle authentication with same precedence as curl: Authorization header > SNYK_TOKEN > OAuth
-	if createBrokerOrgsForBulkMigrationVerbose {
-		fmt.Fprintf(os.Stderr, "* Checking authentication options\n")
-	}
-
-	authHeader, err := buildAuthHeader([]string{}) // No manual headers for this command
-	if err != nil {
-		if createBrokerOrgsForBulkMigrationVerbose {
-			fmt.Fprintf(os.Stderr, "* Warning: failed to get automatic auth: %v\n", err)
-		}
-		// Don't fail the request, just proceed without automatic auth
-	} else if authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
-		if createBrokerOrgsForBulkMigrationVerbose {
-			fmt.Fprintf(os.Stderr, "* Added automatic authorization header\n")
-		}
-	} else if createBrokerOrgsForBulkMigrationVerbose {
-		fmt.Fprintf(os.Stderr, "* No automatic authorization available\n")
-	}
-
-	// Set user agent
-	req.Header.Set("User-Agent", createBrokerOrgsForBulkMigrationUserAgent)
-
-	// Make the request
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	if createBrokerOrgsForBulkMigrationVerbose {
-		fmt.Fprintf(os.Stderr, "* Making request...\n")
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Handle response using the same pattern as other commands
-	return handleCreateBrokerOrgsForBulkMigrationResponse(resp, createBrokerOrgsForBulkMigrationIncludeResp, createBrokerOrgsForBulkMigrationVerbose, createBrokerOrgsForBulkMigrationSilent)
+	return ExecuteAPIRequest(RequestOptions{
+		Method:      "POST",
+		URL:         fullURL,
+		Body:        createBrokerOrgsForBulkMigrationData,
+		ContentType: "application/vnd.api+json",
+		Verbose:     createBrokerOrgsForBulkMigrationVerbose,
+		Silent:      createBrokerOrgsForBulkMigrationSilent,
+		IncludeResp: createBrokerOrgsForBulkMigrationIncludeResp,
+		UserAgent:   createBrokerOrgsForBulkMigrationUserAgent,
+	})
 }
 
 func buildCreateBrokerOrgsForBulkMigrationURL(endpoint, version, tenantID, installID, deploymentID, connectionID string) (string, error) {
@@ -145,37 +90,4 @@ func buildCreateBrokerOrgsForBulkMigrationURL(endpoint, version, tenantID, insta
 
 	u.RawQuery = q.Encode()
 	return u.String(), nil
-}
-
-func handleCreateBrokerOrgsForBulkMigrationResponse(resp *http.Response, includeResp, verbose, silent bool) error {
-	if verbose {
-		fmt.Fprintf(os.Stderr, "* Response: %s\n", resp.Status)
-	}
-
-	// Print response headers if requested
-	if includeResp {
-		fmt.Printf("%s %s\n", resp.Proto, resp.Status)
-		for key, values := range resp.Header {
-			for _, value := range values {
-				fmt.Printf("%s: %s\n", key, value)
-			}
-		}
-		fmt.Println()
-	}
-
-	// Read and print response body
-	if !silent {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read response body: %w", err)
-		}
-		fmt.Print(string(body))
-	}
-
-	// Return error for non-2xx status codes if verbose
-	if verbose && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	return nil
 }
